@@ -15,7 +15,7 @@ export default function AnalisisData() {
   const [isSaving, setIsSaving] = useState(false);
 
   // --- STATE DATA JADUAL (Bermula dengan 1 baris kosong) ---
-  const [dataPelajar, setDataPelajar] = useState([
+  const [dataPelajar, setDataPelajar] = useState<any[]>([
     { id: 1, nama: '', pra: 0, pasca: 0 },
   ]);
 
@@ -99,7 +99,7 @@ export default function AnalisisData() {
   // --- SUNTIKAN 2: ENJIN STATISTIK UJIAN-T (T-TEST) BERSANDAR ---
   const kiraTTest = () => {
     // Hanya ambil murid yang mempunyai markah pra dan pasca yang sah
-    const dataSah = dataPelajar.filter(p => p.pra !== '' && p.pasca !== '');
+    const dataSah = dataPelajar.filter(p => String(p.pra) !== '' && String(p.pasca) !== '');
     const N = dataSah.length;
     
     if (N < 2) return { tValue: 0, signifikan: false, df: 0 }; 

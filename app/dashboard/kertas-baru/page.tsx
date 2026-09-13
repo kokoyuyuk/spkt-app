@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-// SUNTIKAN: Tambah ikon Lightbulb untuk tips
-import { Save, ArrowRight, Loader2, Lightbulb } from 'lucide-react'; 
+import { Save, ArrowRight, Loader2, Lightbulb, Sparkles } from 'lucide-react'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
 import { db } from '../../../lib/firebase'; 
 
@@ -20,9 +19,86 @@ export default function KertasKajianBaharu() {
     kumpulanSasaran: ""
   });
 
+  // ==========================================
+  // 🌟 MULA: LOGIK SUNTIKAN AI (AUTO-LENGKAP)
+  // ==========================================
+  const [cadanganTajuk, setCadanganTajuk] = useState<string[]>([]);
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  useEffect(() => {
+    if (dataKajian.tajuk.length < 8) {
+      setCadanganTajuk([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    if (!showDropdown && cadanganTajuk.length > 0) return;
+
+    const pemicuAI = setTimeout(() => {
+      janaCadanganTajuk(dataKajian.tajuk);
+    }, 1500);
+
+    return () => clearTimeout(pemicuAI);
+  }, [dataKajian.tajuk]);
+
+  const janaCadanganTajuk = async (kataKunci: string) => {
+    setIsAILoading(true);
+    try {
+      // Kunci dicuci bersih dari sebarang 'space'
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
+      
+      if (!apiKey) {
+        console.warn("Kunci AI tidak dijumpai dalam sistem.");
+        return;
+      }
+
+      const prompt = `Saya seorang guru di Malaysia. Saya sedang menaip tajuk kajian tindakan dengan kata kunci: "${kataKunci}". Berikan 3 cadangan tajuk Kajian Tindakan yang lengkap, rasmi, dan mengikut format KPM (melibatkan Intervensi, Isu, dan Kumpulan Sasaran). Jawapan HANYA dalam bentuk array JSON yang ringkas seperti ini: ["Tajuk 1", "Tajuk 2", "Tajuk 3"]. Tanpa sebarang teks atau simbol lain.`;
+
+      // PENYELESAIAN AKHIR: Guna nama rasmi 'gemini-3.6-flash' seperti arahan Google
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+
+      const data = await response.json();
+
+      if (!data.candidates || data.candidates.length === 0) {
+        console.error("Alamak! Gemini membalas dengan ralat ini:\n", JSON.stringify(data, null, 2));
+        alert("Ralat AI. Sila lihat jawapan merah di Console untuk punca sebenar.");
+        setIsAILoading(false);
+        return;
+      }
+
+      const aiText = data.candidates[0].content.parts[0].text;
+      const teksBersih = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const senaraiTajuk = JSON.parse(teksBersih);
+
+      if (Array.isArray(senaraiTajuk) && senaraiTajuk.length > 0) {
+        setCadanganTajuk(senaraiTajuk);
+        setShowDropdown(true);
+      }
+    } catch (error) {
+      console.error("Enjin AI terganggu:", error);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  const pilihTajukAI = (tajukPilihan: string) => {
+    setDataKajian(prev => ({ ...prev, tajuk: tajukPilihan }));
+    setShowDropdown(false); 
+  };
+  // ==========================================
+  // 🌟 TAMAT: LOGIK SUNTIKAN AI
+  // ==========================================
+
   const kemaskiniInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setDataKajian(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'tajuk') setShowDropdown(true);
   };
 
   const simpanDraf = async (e: React.FormEvent) => {
@@ -64,22 +140,61 @@ export default function KertasKajianBaharu() {
         </p>
       </header>
 
-      <form onSubmit={simpanDraf} className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col">
+      <form onSubmit={simpanDraf} className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-0">
         
         <div className="p-8 space-y-10">
           
-          {/* Tajuk Kajian */}
-          <div>
-            <label className="block text-sm font-bold text-slate-800 mb-2">Tajuk Kajian Tindakan</label>
-            <input 
-              type="text" 
-              name="tajuk"
-              value={dataKajian.tajuk}
-              onChange={kemaskiniInput}
-              placeholder="Cth: Meningkatkan Penguasaan Fakta Sejarah Menggunakan Kaedah 'Nyanyian Memori'..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
-              required
-            />
+          {/* ========================================== */}
+          {/* 1. TAJUK KAJIAN (DIPERKUAT DENGAN AI UI) */}
+          {/* ========================================== */}
+          <div className="relative">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-2">
+              Tajuk Kajian Tindakan
+              {isAILoading && (
+                <span className="flex items-center gap-1 text-xs text-fuchsia-600 font-semibold bg-fuchsia-100 px-2 py-0.5 rounded-full animate-pulse">
+                  <Sparkles size={14} /> AI Sedang Merangka...
+                </span>
+              )}
+            </label>
+            
+            <div className="relative">
+              <input 
+                type="text" 
+                name="tajuk"
+                value={dataKajian.tajuk}
+                onChange={kemaskiniInput}
+                autoComplete="off"
+                placeholder="Taip kata kunci (Cth: murid lemah darab) dan rehat 1 saat untuk magis AI..."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
+                required
+              />
+              <div className="absolute right-4 top-3.5 text-slate-300">
+                <Sparkles size={20} className={isAILoading ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+              </div>
+            </div>
+
+            {/* Menu Jatuh Cadangan AI */}
+            {showDropdown && cadanganTajuk.length > 0 && (
+              <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-fuchsia-100 overflow-hidden animate-in slide-in-from-top-2">
+                <div className="bg-gradient-to-r from-fuchsia-600 to-blue-600 px-4 py-2 flex items-center gap-2">
+                  <Sparkles size={16} className="text-white" />
+                  <span className="text-xs font-bold text-white tracking-wider uppercase">Cadangan Tajuk KPM (Bantuan AI)</span>
+                </div>
+                <ul className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                  {cadanganTajuk.map((cadangan, indeks) => (
+                    <li 
+                      key={indeks}
+                      onClick={() => pilihTajukAI(cadangan)}
+                      className="p-4 hover:bg-fuchsia-50 cursor-pointer transition-colors text-sm text-slate-700 font-medium flex gap-3 items-start"
+                    >
+                      <span className="text-fuchsia-500 font-bold mt-0.5">{indeks + 1}.</span>
+                      {cadangan}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
               <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
               <div className="text-sm">
@@ -88,6 +203,7 @@ export default function KertasKajianBaharu() {
               </div>
             </div>
           </div>
+          {/* ========================================== */}
 
           {/* 1.0 Refleksi */}
           <div>

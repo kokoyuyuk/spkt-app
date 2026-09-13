@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // Ditambah untuk navigasi
-import { Save, ArrowRight, Loader2 } from 'lucide-react'; // Ditambah Loader2
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; // Ditambah Firebase
-import { db } from '../../../lib/firebase'; // Ditambah laluan fail Firebase
+import { useRouter } from 'next/navigation';
+// SUNTIKAN: Tambah ikon Lightbulb untuk tips
+import { Save, ArrowRight, Loader2, Lightbulb } from 'lucide-react'; 
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
+import { db } from '../../../lib/firebase'; 
 
 export default function KertasKajianBaharu() {
-  const router = useRouter(); // Penghala untuk lompat halaman
-  const [isSaving, setIsSaving] = useState(false); // State untuk animasi butang
+  const router = useRouter(); 
+  const [isSaving, setIsSaving] = useState(false); 
 
-  // 1. State gabungan lengkap untuk semua medan Kajian Tindakan KPM
   const [dataKajian, setDataKajian] = useState({
     tajuk: "",
     refleksi: "",
@@ -27,10 +27,9 @@ export default function KertasKajianBaharu() {
 
   const simpanDraf = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true); // Mula animasi berpusing
+    setIsSaving(true); 
 
     try {
-      // 2. Logik Firebase: Simpan data ke dalam jadual 'kajian_tindakan'
       await addDoc(collection(db, "kajian_tindakan"), {
         tajukKajian: dataKajian.tajuk,
         refleksiLalu: dataKajian.refleksi,
@@ -43,22 +42,19 @@ export default function KertasKajianBaharu() {
       });
 
       alert("Draf Kertas Kajian berjaya disimpan di pangkalan data!");
-      
-      // Bawa guru terus ke halaman Arkib Laporan selepas berjaya
       router.push('/dashboard/arkib'); 
       
     } catch (error) {
       console.error("Ralat Firebase:", error);
       alert("Maaf, gagal menyimpan. Sila pastikan pangkalan data Firebase bersambung.");
     } finally {
-      setIsSaving(false); // Hentikan animasi berpusing
+      setIsSaving(false); 
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col pb-12">
       
-      {/* Pengepala Halaman */}
       <header className="mb-6">
         <h1 className="text-3xl font-extrabold text-slate-800 mb-1">
           Kertas Kajian Baharu
@@ -68,11 +64,9 @@ export default function KertasKajianBaharu() {
         </p>
       </header>
 
-      {/* Kad Borang Tunggal (Single Card Layout) */}
       <form onSubmit={simpanDraf} className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col">
         
-        {/* Ruangan Input Utama */}
-        <div className="p-8 space-y-8">
+        <div className="p-8 space-y-10">
           
           {/* Tajuk Kajian */}
           <div>
@@ -82,10 +76,17 @@ export default function KertasKajianBaharu() {
               name="tajuk"
               value={dataKajian.tajuk}
               onChange={kemaskiniInput}
-              placeholder="Contoh: Meningkatkan Kemahiran Cantuman Tunas Menggunakan Kit Hijau..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400"
+              placeholder="Cth: Meningkatkan Penguasaan Fakta Sejarah Menggunakan Kaedah 'Nyanyian Memori'..."
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
               required
             />
+            <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+              <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+              <div className="text-sm">
+                <p className="font-bold mb-1">Tips Tajuk KPM:</p>
+                <p className="opacity-90">Tajuk yang baik mesti mengandungi 3 elemen: <strong>Tindakan/Intervensi</strong> (Kaedah Nyanyian), <strong>Isu</strong> (Penguasaan Fakta), dan <strong>Sasaran</strong> (Murid Tahun 5).</p>
+              </div>
+            </div>
           </div>
 
           {/* 1.0 Refleksi */}
@@ -95,10 +96,17 @@ export default function KertasKajianBaharu() {
               name="refleksi"
               value={dataKajian.refleksi}
               onChange={kemaskiniInput}
-              rows={4}
-              placeholder="Semasa menjalankan amali di kebun, saya mendapati murid sukar untuk..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y"
+              rows={5}
+              placeholder="Saya mengajar kelas 4 Tekun. Sewaktu menyemak kertas ujian topikal bulan Mac, saya berasa sangat kecewa kerana..."
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
             ></textarea>
+            <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+              <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+              <div className="text-sm">
+                <p className="font-bold mb-1">Tips Refleksi:</p>
+                <p className="opacity-90">Luahkan masalah sebenar di dalam kelas. Nyatakan bagaimana anda mengesan masalah tersebut (contoh: pemantauan, markah ujian, atau murid tidak mahu mengangkat tangan).</p>
+              </div>
+            </div>
           </div>
 
           {/* 2.0 Fokus Kajian */}
@@ -109,13 +117,20 @@ export default function KertasKajianBaharu() {
               value={dataKajian.fokus}
               onChange={kemaskiniInput}
               rows={4}
-              placeholder="Kajian ini memfokuskan kepada kelemahan penguasaan psikomotor murid..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y"
+              placeholder="Walaupun murid mempunyai pelbagai masalah, kajian ini hanya memfokuskan kepada kegagalan murid menyusun struktur ayat dengan betul..."
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
             ></textarea>
+            <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+              <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+              <div className="text-sm">
+                <p className="font-bold mb-1">Tips Fokus:</p>
+                <p className="opacity-90">Jangan selesaikan semua masalah serentak. Pilih <strong>SATU</strong> kelemahan spesifik yang paling kritikal untuk diselesaikan dahulu (Cth: Kemahiran mendarab, bukan kelemahan seluruh subjek Matematik).</p>
+              </div>
+            </div>
           </div>
 
           {/* 3.0 Objektif (Susunan Bersebelahan / Grid) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <label className="block text-sm font-bold text-slate-800 mb-2">3.0 Objektif Am</label>
               <textarea 
@@ -123,10 +138,18 @@ export default function KertasKajianBaharu() {
                 value={dataKajian.objektifAm}
                 onChange={kemaskiniInput}
                 rows={4}
-                placeholder="Tujuan am kajian ini adalah untuk meningkatkan kualiti P&P bagi subjek..."
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y"
+                placeholder="Tujuan am kajian ini adalah untuk meningkatkan kualiti PdP bagi subjek Sains dalam kalangan murid luar bandar..."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
               ></textarea>
+              <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+                <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+                <div className="text-sm">
+                  <p className="font-bold mb-1">Tips Objektif Am:</p>
+                  <p className="opacity-90">Kenyataan umum tentang halatuju kajian untuk jangka masa panjang (tidak semestinya boleh diukur).</p>
+                </div>
+              </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-slate-800 mb-2">3.1 Objektif Khusus</label>
               <textarea 
@@ -134,9 +157,16 @@ export default function KertasKajianBaharu() {
                 value={dataKajian.objektifKhusus}
                 onChange={kemaskiniInput}
                 rows={4}
-                placeholder="1. Murid dapat melengkapkan amali dengan betul.&#10;2. Meningkatkan markah..."
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y"
+                placeholder="1. Meningkatkan kelulusan ujian pasca sebanyak 20%.&#10;2. Memastikan 10 murid dapat melengkapkan amali tanpa bantuan."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
               ></textarea>
+              <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+                <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+                <div className="text-sm">
+                  <p className="font-bold mb-1">Tips Objektif Khusus:</p>
+                  <p className="opacity-90">Mesti bersifat SMART. Letakkan <strong>angka, peratusan, atau indikator</strong> yang boleh diukur dengan jelas selepas intervensi dijalankan.</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -148,9 +178,16 @@ export default function KertasKajianBaharu() {
               name="kumpulanSasaran"
               value={dataKajian.kumpulanSasaran}
               onChange={kemaskiniInput}
-              placeholder="Contoh: 15 orang murid Tingkatan 4 Sains Pertanian..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400"
+              placeholder="Cth: Kajian ini melibatkan 8 orang murid (5 lelaki, 3 perempuan) dari kelas 4 Inovatif yang mencatat gred E..."
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
             />
+            <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
+              <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
+              <div className="text-sm">
+                <p className="font-bold mb-1">Tips Kumpulan Sasaran:</p>
+                <p className="opacity-90">Jangan libatkan satu kelas penuh jika masalah hanya dialami oleh sebahagian murid. Nyatakan bilangan tepat, kelas, jantina (jika relevan), dan tahap kognitif mereka.</p>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -159,20 +196,20 @@ export default function KertasKajianBaharu() {
         <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-between items-center rounded-b-2xl">
           <button 
             type="button" 
-            onClick={() => router.back()} // Butang batal akan kembali ke halaman sebelumnya
-            className="text-slate-500 font-medium hover:text-slate-800 transition-colors px-2"
+            onClick={() => router.back()} 
+            className="text-slate-500 font-medium hover:text-slate-800 transition-colors px-4 py-2 rounded-lg hover:bg-slate-200/50"
           >
             Batal
           </button>
           
           <button 
             type="submit"
-            disabled={isSaving} // Kunci butang semasa loading
-            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-6 py-2.5 rounded-xl font-semibold transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            disabled={isSaving} 
+            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-            {isSaving ? "Menyimpan..." : "Simpan Draf"} 
-            {!isSaving && <ArrowRight size={18} />}
+            {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+            {isSaving ? "Menyimpan Draf..." : "Simpan Kertas Kajian"} 
+            {!isSaving && <ArrowRight size={20} />}
           </button>
         </div>
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle, Loader2, Download, Search, Plus, FileImage, Activity } from 'lucide-react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+// 1. SUNTIKAN: Tambah ikon Trash2
+import { BookOpen, CheckCircle, Loader2, Download, Search, Plus, FileImage, Activity, Trash2 } from 'lucide-react';
+// 2. SUNTIKAN: Tambah doc dan deleteDoc
+import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import Link from 'next/link';
 
@@ -15,7 +17,7 @@ interface Kajian {
 
 export default function ArkibKajian() {
   const [senaraiArkib, setSenaraiArkib] = useState<Kajian[]>([]);
-  const [senaraiTapis, setSenaraiTapis] = useState<Kajian[]>([]); // Untuk carian
+  const [senaraiTapis, setSenaraiTapis] = useState<Kajian[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [kataKunci, setKataKunci] = useState("");
 
@@ -36,7 +38,7 @@ export default function ArkibKajian() {
         });
         
         setSenaraiArkib(dataSementara);
-        setSenaraiTapis(dataSementara); // Salinan untuk carian
+        setSenaraiTapis(dataSementara); 
       } catch (error) {
         console.error("Ralat menyedut data arkib:", error);
       } finally {
@@ -47,7 +49,6 @@ export default function ArkibKajian() {
     ambilDataArkib();
   }, []);
 
-  // Fungsi untuk menguruskan carian masa sebenar (real-time)
   const urusCarian = (e: React.ChangeEvent<HTMLInputElement>) => {
     const teks = e.target.value;
     setKataKunci(teks);
@@ -57,6 +58,35 @@ export default function ArkibKajian() {
       kajian.fokusKajian.toLowerCase().includes(teks.toLowerCase())
     );
     setSenaraiTapis(hasilTapis);
+  };
+
+  // ==========================================
+  // 🗑️ FUNGSI MAGIS: PADAM KAJIAN
+  // ==========================================
+  const padamKajian = async (id: string) => {
+    // 1. Amaran keselamatan sebelum memadam
+    const sah = window.confirm("Adakah anda pasti ingin memadam kertas kajian ini? Tindakan ini tidak boleh dikembalikan.");
+    if (!sah) return; // Jika cikgu tekan Cancel, batalkan operasi
+
+    try {
+      // 2. Tembak arahan padam ke pelayan Firebase
+      await deleteDoc(doc(db, "kajian_tindakan", id));
+      
+      // 3. Kemas kini paparan secara automatik (tanpa perlu refresh page)
+      const senaraiBaru = senaraiArkib.filter((k) => k.id !== id);
+      setSenaraiArkib(senaraiBaru);
+      
+      // Semak jika pengguna sedang guna kotak carian
+      const hasilTapisBaru = senaraiBaru.filter(kajian => 
+        kajian.tajukKajian.toLowerCase().includes(kataKunci.toLowerCase()) || 
+        kajian.fokusKajian.toLowerCase().includes(kataKunci.toLowerCase())
+      );
+      setSenaraiTapis(hasilTapisBaru);
+      
+    } catch (error) {
+      console.error("Ralat memadam kajian:", error);
+      alert("Maaf, gagal memadam data. Pastikan anda mempunyai akses.");
+    }
   };
 
   return (
@@ -131,7 +161,7 @@ export default function ArkibKajian() {
                     <Activity size={18} /> Buka Kitaran
                   </Link>
 
-                  {/* Cetak OPR (One Page Report) - SUDAH DIBUKA KUNCINYA */}
+                  {/* Cetak OPR (One Page Report) */}
                   <Link 
                     href={`/dashboard/opr/${kajian.id}`}
                     target="_blank"
@@ -148,6 +178,15 @@ export default function ArkibKajian() {
                   >
                     <Download size={18} /> Laporan
                   </Link>
+
+                  {/* 🗑️ Butang Padam yang Elegan (Baru) */}
+                  <button 
+                    onClick={() => padamKajian(kajian.id)}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 font-semibold rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                    title="Padam Kertas Kajian Ini"
+                  >
+                    <Trash2 size={18} /> Padam
+                  </button>
                   
                 </div>
               </div>

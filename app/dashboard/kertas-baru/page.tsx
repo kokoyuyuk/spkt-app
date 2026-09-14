@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, ArrowRight, Loader2, Lightbulb, Sparkles } from 'lucide-react'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
-import { db } from '../../../lib/firebase'; 
+import { db, auth } from '../../../lib/firebase'; 
 
 export default function KertasKajianBaharu() {
   const router = useRouter(); 
@@ -20,32 +20,41 @@ export default function KertasKajianBaharu() {
   });
 
   // ==========================================
-  // 🌟 MULA: LOGIK SUNTIKAN AI (AUTO-LENGKAP)
+  // 🌟 MULA: LOGIK "OMNI-AI" (SEMUA MEDAN)
   // ==========================================
-  const [cadanganTajuk, setCadanganTajuk] = useState<string[]>([]);
-  const [isAILoading, setIsAILoading] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+  // Kita satukan state AI supaya ia tahu kotak mana yang sedang dikawal
+  const [aiState, setAiState] = useState({
+    medanAktif: "", 
+    cadangan: [] as string[],
+    sedangLoading: false,
+    paparDropdown: false
+  });
 
   useEffect(() => {
-    if (dataKajian.tajuk.length < 8) {
-      setCadanganTajuk([]);
-      setShowDropdown(false);
+    if (!aiState.medanAktif) return;
+    
+    // Tarik teks semasa berdasarkan kotak yang sedang aktif (ditaip oleh guru)
+    const teksSemasa = dataKajian[aiState.medanAktif as keyof typeof dataKajian];
+
+    // Jika guru baru taip sikit, AI tak perlu buang masa berfikir
+    if (teksSemasa.length < 8) {
+      setAiState(prev => ({ ...prev, cadangan: [], paparDropdown: false }));
       return;
     }
 
-    if (!showDropdown && cadanganTajuk.length > 0) return;
+    if (!aiState.paparDropdown && aiState.cadangan.length > 0) return;
 
+    // Magis Debounce: Tunggu 1.5 saat selepas jari guru berhenti menaip
     const pemicuAI = setTimeout(() => {
-      janaCadanganTajuk(dataKajian.tajuk);
+      janaCadanganOmniAI(aiState.medanAktif, teksSemasa);
     }, 1500);
 
     return () => clearTimeout(pemicuAI);
-  }, [dataKajian.tajuk]);
+  }, [dataKajian, aiState.medanAktif]);
 
-  const janaCadanganTajuk = async (kataKunci: string) => {
-    setIsAILoading(true);
+  const janaCadanganOmniAI = async (medan: string, kataKunci: string) => {
+    setAiState(prev => ({ ...prev, sedangLoading: true }));
     try {
-      // Kunci dicuci bersih dari sebarang 'space'
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
       
       if (!apiKey) {
@@ -53,9 +62,25 @@ export default function KertasKajianBaharu() {
         return;
       }
 
-      const prompt = `Saya seorang guru di Malaysia. Saya sedang menaip tajuk kajian tindakan dengan kata kunci: "${kataKunci}". Berikan 3 cadangan tajuk Kajian Tindakan yang lengkap, rasmi, dan mengikut format KPM (melibatkan Intervensi, Isu, dan Kumpulan Sasaran). Jawapan HANYA dalam bentuk array JSON yang ringkas seperti ini: ["Tajuk 1", "Tajuk 2", "Tajuk 3"]. Tanpa sebarang teks atau simbol lain.`;
+      // Tukar "otak" AI berdasarkan kotak yang guru sedang taip
+      let arahanFormat = "";
+      switch (medan) {
+        case "tajuk": 
+          arahanFormat = "Tajuk Kajian Tindakan lengkap (mengandungi Intervensi, Isu, dan Kumpulan Sasaran)."; break;
+        case "refleksi": 
+          arahanFormat = "Perenggan Refleksi Pengajaran & Pembelajaran lalu yang menceritakan kekecewaan guru dan masalah murid di dalam kelas secara ringkas."; break;
+        case "fokus": 
+          arahanFormat = "Perenggan Fokus Kajian yang mensasarkan satu kelemahan spesifik murid (isu keprihatinan)."; break;
+        case "objektifAm": 
+          arahanFormat = "Ayat Objektif Am (tujuan umum kajian untuk jangka masa panjang bagi menangani isu)."; break;
+        case "objektifKhusus": 
+          arahanFormat = "Ayat Objektif Khusus yang bersifat SMART (mengandungi angka/peratusan yang boleh diukur selepas intervensi)."; break;
+        case "kumpulanSasaran": 
+          arahanFormat = "Ayat profil Kumpulan Sasaran (menyatakan bilangan, kelas, jantina, dan pencapaian ringkas mereka)."; break;
+      }
 
-      // PENYELESAIAN AKHIR: Guna nama rasmi 'gemini-3.6-flash' seperti arahan Google
+      const prompt = `Saya seorang guru di Malaysia. Berdasarkan draf awal saya: "${kataKunci}". Hasilkan 3 cadangan ${arahanFormat} mengikut format rasmi Kajian Tindakan KPM. Jawapan HANYA dalam bentuk array JSON yang ringkas seperti ini: ["Cadangan 1", "Cadangan 2", "Cadangan 3"]. Tanpa sebarang teks, mukadimah, atau simbol lain.`;
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,40 +90,39 @@ export default function KertasKajianBaharu() {
       const data = await response.json();
 
       if (!data.candidates || data.candidates.length === 0) {
-        console.error("Alamak! Gemini membalas dengan ralat ini:\n", JSON.stringify(data, null, 2));
-        alert("Ralat AI. Sila lihat jawapan merah di Console untuk punca sebenar.");
-        setIsAILoading(false);
+        console.error("Alamak! Ralat AI:", data);
+        setAiState(prev => ({ ...prev, sedangLoading: false }));
         return;
       }
 
       const aiText = data.candidates[0].content.parts[0].text;
       const teksBersih = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const senaraiTajuk = JSON.parse(teksBersih);
+      const senaraiCadangan = JSON.parse(teksBersih);
 
-      if (Array.isArray(senaraiTajuk) && senaraiTajuk.length > 0) {
-        setCadanganTajuk(senaraiTajuk);
-        setShowDropdown(true);
+      if (Array.isArray(senaraiCadangan) && senaraiCadangan.length > 0) {
+        setAiState(prev => ({ ...prev, cadangan: senaraiCadangan, paparDropdown: true }));
       }
     } catch (error) {
       console.error("Enjin AI terganggu:", error);
     } finally {
-      setIsAILoading(false);
+      setAiState(prev => ({ ...prev, sedangLoading: false }));
     }
   };
 
-  const pilihTajukAI = (tajukPilihan: string) => {
-    setDataKajian(prev => ({ ...prev, tajuk: tajukPilihan }));
-    setShowDropdown(false); 
+  const pilihCadanganAI = (cadanganPilihan: string) => {
+    setDataKajian(prev => ({ ...prev, [aiState.medanAktif]: cadanganPilihan }));
+    setAiState(prev => ({ ...prev, paparDropdown: false })); 
   };
   // ==========================================
-  // 🌟 TAMAT: LOGIK SUNTIKAN AI
+  // 🌟 TAMAT: LOGIK "OMNI-AI"
   // ==========================================
 
   const kemaskiniInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setDataKajian(prev => ({ ...prev, [name]: value }));
     
-    if (name === 'tajuk') setShowDropdown(true);
+    // Beritahu AI kotak mana yang sedang dikacau oleh guru sekarang
+    setAiState(prev => ({ ...prev, medanAktif: name, paparDropdown: true }));
   };
 
   const simpanDraf = async (e: React.FormEvent) => {
@@ -106,6 +130,14 @@ export default function KertasKajianBaharu() {
     setIsSaving(true); 
 
     try {
+      const penggunaSemasa = auth.currentUser;
+      
+      if (!penggunaSemasa) {
+        alert("🔒 Sila log masuk ke dalam sistem terlebih dahulu untuk menyimpan kertas kajian.");
+        setIsSaving(false);
+        return;
+      }
+
       await addDoc(collection(db, "kajian_tindakan"), {
         tajukKajian: dataKajian.tajuk,
         refleksiLalu: dataKajian.refleksi,
@@ -115,6 +147,7 @@ export default function KertasKajianBaharu() {
         kumpulanSasaran: dataKajian.kumpulanSasaran,
         status: "Draf", 
         tarikhDicipta: serverTimestamp(),
+        userId: penggunaSemasa.uid 
       });
 
       alert("Draf Kertas Kajian berjaya disimpan di pangkalan data!");
@@ -127,6 +160,43 @@ export default function KertasKajianBaharu() {
       setIsSaving(false); 
     }
   };
+
+  // ==========================================
+  // KOMPONEN PEMBANTU UI AI (Supaya kod tak semak)
+  // ==========================================
+  const IndikatorAILoading = ({ namaMedan }: { namaMedan: string }) => {
+    if (!aiState.sedangLoading || aiState.medanAktif !== namaMedan) return null;
+    return (
+      <span className="flex items-center gap-1 text-xs text-fuchsia-600 font-semibold bg-fuchsia-100 px-2 py-0.5 rounded-full animate-pulse ml-2">
+        <Sparkles size={14} /> AI Merangka...
+      </span>
+    );
+  };
+
+  const MenuCadanganAI = ({ namaMedan }: { namaMedan: string }) => {
+    if (aiState.medanAktif !== namaMedan || !aiState.paparDropdown || aiState.cadangan.length === 0) return null;
+    return (
+      <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-fuchsia-100 overflow-hidden animate-in slide-in-from-top-2">
+        <div className="bg-gradient-to-r from-fuchsia-600 to-blue-600 px-4 py-2 flex items-center gap-2">
+          <Sparkles size={16} className="text-white" />
+          <span className="text-xs font-bold text-white tracking-wider uppercase">Cadangan AI KPM (Klik untuk guna)</span>
+        </div>
+        <ul className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+          {aiState.cadangan.map((cadangan, indeks) => (
+            <li 
+              key={indeks}
+              onClick={() => pilihCadanganAI(cadangan)}
+              className="p-4 hover:bg-fuchsia-50 cursor-pointer transition-colors text-sm text-slate-700 font-medium flex gap-3 items-start"
+            >
+              <span className="text-fuchsia-500 font-bold mt-0.5">{indeks + 1}.</span>
+              <span className="whitespace-pre-wrap leading-relaxed">{cadangan}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  // ==========================================
 
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col pb-12">
@@ -145,56 +215,24 @@ export default function KertasKajianBaharu() {
         <div className="p-8 space-y-10">
           
           {/* ========================================== */}
-          {/* 1. TAJUK KAJIAN (DIPERKUAT DENGAN AI UI) */}
+          {/* 1. TAJUK KAJIAN */}
           {/* ========================================== */}
           <div className="relative">
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-2">
-              Tajuk Kajian Tindakan
-              {isAILoading && (
-                <span className="flex items-center gap-1 text-xs text-fuchsia-600 font-semibold bg-fuchsia-100 px-2 py-0.5 rounded-full animate-pulse">
-                  <Sparkles size={14} /> AI Sedang Merangka...
-                </span>
-              )}
+            <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+              Tajuk Kajian Tindakan <IndikatorAILoading namaMedan="tajuk" />
             </label>
-            
             <div className="relative">
               <input 
-                type="text" 
-                name="tajuk"
-                value={dataKajian.tajuk}
-                onChange={kemaskiniInput}
-                autoComplete="off"
+                type="text" name="tajuk" value={dataKajian.tajuk} onChange={kemaskiniInput} autoComplete="off"
                 placeholder="Taip kata kunci (Cth: murid lemah darab) dan rehat 1 saat untuk magis AI..."
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
-                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium" required
               />
               <div className="absolute right-4 top-3.5 text-slate-300">
-                <Sparkles size={20} className={isAILoading ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+                <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'tajuk' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
               </div>
             </div>
-
-            {/* Menu Jatuh Cadangan AI */}
-            {showDropdown && cadanganTajuk.length > 0 && (
-              <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-fuchsia-100 overflow-hidden animate-in slide-in-from-top-2">
-                <div className="bg-gradient-to-r from-fuchsia-600 to-blue-600 px-4 py-2 flex items-center gap-2">
-                  <Sparkles size={16} className="text-white" />
-                  <span className="text-xs font-bold text-white tracking-wider uppercase">Cadangan Tajuk KPM (Bantuan AI)</span>
-                </div>
-                <ul className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                  {cadanganTajuk.map((cadangan, indeks) => (
-                    <li 
-                      key={indeks}
-                      onClick={() => pilihTajukAI(cadangan)}
-                      className="p-4 hover:bg-fuchsia-50 cursor-pointer transition-colors text-sm text-slate-700 font-medium flex gap-3 items-start"
-                    >
-                      <span className="text-fuchsia-500 font-bold mt-0.5">{indeks + 1}.</span>
-                      {cadangan}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
+            <MenuCadanganAI namaMedan="tajuk" />
+            
             <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
               <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
               <div className="text-sm">
@@ -203,19 +241,26 @@ export default function KertasKajianBaharu() {
               </div>
             </div>
           </div>
-          {/* ========================================== */}
 
-          {/* 1.0 Refleksi */}
-          <div>
-            <label className="block text-sm font-bold text-slate-800 mb-2">1.0 Refleksi Pengajaran & Pembelajaran Lalu</label>
-            <textarea 
-              name="refleksi"
-              value={dataKajian.refleksi}
-              onChange={kemaskiniInput}
-              rows={5}
-              placeholder="Saya mengajar kelas 4 Tekun. Sewaktu menyemak kertas ujian topikal bulan Mac, saya berasa sangat kecewa kerana..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
-            ></textarea>
+          {/* ========================================== */}
+          {/* 1.0 REFLEKSI */}
+          {/* ========================================== */}
+          <div className="relative">
+            <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+              1.0 Refleksi Pengajaran & Pembelajaran Lalu <IndikatorAILoading namaMedan="refleksi" />
+            </label>
+            <div className="relative">
+              <textarea 
+                name="refleksi" value={dataKajian.refleksi} onChange={kemaskiniInput} rows={5}
+                placeholder="Saya mengajar kelas 4 Tekun. Sewaktu menyemak kertas ujian topikal bulan Mac, saya berasa sangat kecewa kerana..."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
+              ></textarea>
+              <div className="absolute right-4 top-4 text-slate-300">
+                <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'refleksi' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+              </div>
+            </div>
+            <MenuCadanganAI namaMedan="refleksi" />
+
             <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
               <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
               <div className="text-sm">
@@ -225,17 +270,25 @@ export default function KertasKajianBaharu() {
             </div>
           </div>
 
-          {/* 2.0 Fokus Kajian */}
-          <div>
-            <label className="block text-sm font-bold text-slate-800 mb-2">2.0 Fokus Kajian / Isu Keprihatinan</label>
-            <textarea 
-              name="fokus"
-              value={dataKajian.fokus}
-              onChange={kemaskiniInput}
-              rows={4}
-              placeholder="Walaupun murid mempunyai pelbagai masalah, kajian ini hanya memfokuskan kepada kegagalan murid menyusun struktur ayat dengan betul..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
-            ></textarea>
+          {/* ========================================== */}
+          {/* 2.0 FOKUS KAJIAN */}
+          {/* ========================================== */}
+          <div className="relative">
+            <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+              2.0 Fokus Kajian / Isu Keprihatinan <IndikatorAILoading namaMedan="fokus" />
+            </label>
+            <div className="relative">
+              <textarea 
+                name="fokus" value={dataKajian.fokus} onChange={kemaskiniInput} rows={4}
+                placeholder="Walaupun murid mempunyai pelbagai masalah, kajian ini hanya memfokuskan kepada kegagalan murid menyusun struktur ayat dengan betul..."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
+              ></textarea>
+              <div className="absolute right-4 top-4 text-slate-300">
+                <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'fokus' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+              </div>
+            </div>
+            <MenuCadanganAI namaMedan="fokus" />
+
             <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
               <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
               <div className="text-sm">
@@ -245,18 +298,26 @@ export default function KertasKajianBaharu() {
             </div>
           </div>
 
-          {/* 3.0 Objektif (Susunan Bersebelahan / Grid) */}
+          {/* ========================================== */}
+          {/* 3.0 OBJEKTIF */}
+          {/* ========================================== */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <label className="block text-sm font-bold text-slate-800 mb-2">3.0 Objektif Am</label>
-              <textarea 
-                name="objektifAm"
-                value={dataKajian.objektifAm}
-                onChange={kemaskiniInput}
-                rows={4}
-                placeholder="Tujuan am kajian ini adalah untuk meningkatkan kualiti PdP bagi subjek Sains dalam kalangan murid luar bandar..."
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
-              ></textarea>
+            <div className="relative">
+              <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+                3.0 Objektif Am <IndikatorAILoading namaMedan="objektifAm" />
+              </label>
+              <div className="relative">
+                <textarea 
+                  name="objektifAm" value={dataKajian.objektifAm} onChange={kemaskiniInput} rows={4}
+                  placeholder="Tujuan am kajian ini adalah untuk meningkatkan kualiti PdP bagi subjek Sains dalam kalangan murid luar bandar..."
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-10 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
+                ></textarea>
+                <div className="absolute right-3 top-4 text-slate-300">
+                  <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'objektifAm' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+                </div>
+              </div>
+              <MenuCadanganAI namaMedan="objektifAm" />
+
               <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
                 <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
                 <div className="text-sm">
@@ -266,16 +327,22 @@ export default function KertasKajianBaharu() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-800 mb-2">3.1 Objektif Khusus</label>
-              <textarea 
-                name="objektifKhusus"
-                value={dataKajian.objektifKhusus}
-                onChange={kemaskiniInput}
-                rows={4}
-                placeholder="1. Meningkatkan kelulusan ujian pasca sebanyak 20%.&#10;2. Memastikan 10 murid dapat melengkapkan amali tanpa bantuan."
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
-              ></textarea>
+            <div className="relative">
+              <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+                3.1 Objektif Khusus <IndikatorAILoading namaMedan="objektifKhusus" />
+              </label>
+              <div className="relative">
+                <textarea 
+                  name="objektifKhusus" value={dataKajian.objektifKhusus} onChange={kemaskiniInput} rows={4}
+                  placeholder="1. Meningkatkan kelulusan ujian pasca sebanyak 20%.&#10;2. Memastikan 10 murid dapat melengkapkan amali tanpa bantuan."
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-10 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 resize-y leading-relaxed"
+                ></textarea>
+                <div className="absolute right-3 top-4 text-slate-300">
+                  <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'objektifKhusus' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+                </div>
+              </div>
+              <MenuCadanganAI namaMedan="objektifKhusus" />
+
               <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
                 <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
                 <div className="text-sm">
@@ -286,17 +353,25 @@ export default function KertasKajianBaharu() {
             </div>
           </div>
 
-          {/* 4.0 Kumpulan Sasaran */}
-          <div>
-            <label className="block text-sm font-bold text-slate-800 mb-2">4.0 Kumpulan Sasaran</label>
-            <input 
-              type="text" 
-              name="kumpulanSasaran"
-              value={dataKajian.kumpulanSasaran}
-              onChange={kemaskiniInput}
-              placeholder="Cth: Kajian ini melibatkan 8 orang murid (5 lelaki, 3 perempuan) dari kelas 4 Inovatif yang mencatat gred E..."
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
-            />
+          {/* ========================================== */}
+          {/* 4.0 KUMPULAN SASARAN */}
+          {/* ========================================== */}
+          <div className="relative">
+            <label className="flex items-center text-sm font-bold text-slate-800 mb-2">
+              4.0 Kumpulan Sasaran <IndikatorAILoading namaMedan="kumpulanSasaran" />
+            </label>
+            <div className="relative">
+              <input 
+                type="text" name="kumpulanSasaran" value={dataKajian.kumpulanSasaran} onChange={kemaskiniInput} autoComplete="off"
+                placeholder="Cth: Kajian ini melibatkan 8 orang murid (5 lelaki, 3 perempuan) dari kelas 4 Inovatif yang mencatat gred E..."
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
+              />
+              <div className="absolute right-4 top-3.5 text-slate-300">
+                <Sparkles size={20} className={aiState.sedangLoading && aiState.medanAktif === 'kumpulanSasaran' ? "text-fuchsia-500 animate-spin" : "text-slate-300"} />
+              </div>
+            </div>
+            <MenuCadanganAI namaMedan="kumpulanSasaran" />
+
             <div className="mt-3 bg-blue-50 text-blue-700 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
               <Lightbulb size={20} className="shrink-0 mt-0.5 text-blue-600" />
               <div className="text-sm">
